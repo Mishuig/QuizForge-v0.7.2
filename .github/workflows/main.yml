@@ -1,0 +1,150 @@
+name: Portable Windows
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write   # потрібно лише для публікації релізу з тегу
+
+concurrency:
+  group: portable-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - run: pip install -r requirements.txt pytest
+      - run: python -m pytest tests/ -q --tb=short
+        env:
+          QT_QPA_PLATFORM: offscreen
+
+  build:
+    name: Build ${{ matrix.app }}
+    needs: test
+    runs-on: windows-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - app: Client
+            entry: client/main.py
+            icon: assets/logo-client.ico
+          - app: Admin
+            entry: admin/main.py
+            icon: assets/logo-admin.ico
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build ${{ matrix.app }} (PyInstaller)
+        run: |
+          test -f "${{ matrix.entry }}" || { echo "::error::${{ matrix.entry }} not found"; exit 1; }
+          pyinstaller --noconfirm --clean --onefile --windowed \
+            --name "QuizForge-${{ matrix.app }}" \
+            --icon "${{ matrix.icon }}" \
+            --paths . \
+            --add-data "assets;assets" \
+            --add-data "client/ui;client/ui" \
+            --add-data "fonts;fonts" \
+            --hidden-import PyQt6.QtSvg \
+            --exclude-module tkinter \
+            "${{ matrix.entry }}"
+          ls -lh dist
+
+      - name: Smoke test (exe starts and keeps running)
+        run: |
+          mkdir smoke && cp "dist/QuizForge-${{ matrix.app }}.exe" smoke/ && cp config.json.example smoke/config.json
+          cd smoke
+          set +e
+          QT_QPA_PLATFORM=offscreen timeout 15 "./QuizForge-${{ matrix.app }}.exe"
+          code=$?
+          set -e
+          # 124 = таймаут: застосунок живий і чекає на введення (вікно входу відкрилось)
+          if [ "$code" -ne 124 ]; then
+            echo "::error::QuizForge-${{ matrix.app }}.exe exited early with code $code"
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exe-${{ matrix.app }}
+          path: dist/QuizForge-${{ matrix.app }}.exe
+          if-no-files-found: error
+          retention-days: 7
+
+  package:
+    name: Package & release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: ver
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=dev-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: exe-*
+          merge-multiple: true
+          path: dl
+
+      - name: Assemble portable folder
+        run: |
+          name="QuizForge-Portable-Windows-${{ steps.ver.outputs.version }}"
+          mkdir -p "$name"
+          cp dl/QuizForge-Client.exe dl/QuizForge-Admin.exe "$name/"
+          cp config.json.example "$name/config.json"
+          cp README.md FIRST_RUN.md LICENSE "$name/"
+          cp -r assets fonts "$name/"
+          echo "${{ steps.ver.outputs.version }}" > "$name/VERSION"
+          zip -r "$name.zip" "$name"
+          sha256sum "$name.zip" > "$name.zip.sha256"
+          echo "ZIP=$name.zip" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: QuizForge-Portable-Windows-${{ steps.ver.outputs.version }}
+          path: |
+            ${{ env.ZIP }}
+            ${{ env.ZIP }}.sha256
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ env.ZIP }}
+            ${{ env.ZIP }}.sha256
+          generate_release_notes: true
