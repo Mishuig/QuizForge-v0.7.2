@@ -87,8 +87,8 @@ def _write_icons(accent: str) -> str:
     return folder.as_posix()
 
 
-def apply_theme(app: QApplication, accent: str | None = None) -> None:
-    """Застосовує тему до всього застосунку."""
+def apply_theme(app: QApplication, accent: str | None = None, theme: str = "dark") -> None:
+    """Застосовує тему до всього застосунку. theme: 'dark' | 'light'."""
     accent = accent or DEFAULT_ACCENT
     if not QColor(accent).isValid():
         accent = DEFAULT_ACCENT
@@ -97,18 +97,73 @@ def apply_theme(app: QApplication, accent: str | None = None) -> None:
         logger.warning("Файл стилів не знайдено: %s", QSS_PATH)
         return
     qss = QSS_PATH.read_text(encoding="utf-8")
-    tokens = {
+
+    # Базові токени теми
+    if theme == "light":
+        tokens = {
+            "@BG@": "#F8FAFC",
+            "@BG2@": "#FFFFFF",
+            "@BG3@": "#F1F5F9",
+            "@FG@": "#0F172A",
+            "@FG2@": "#334155",
+            "@MUTED@": "#64748B",
+            "@BORDER@": "#E2E8F0",
+            "@BORDER2@": "#CBD5E1",
+            "@CARD@": "#FFFFFF",
+            "@HOVER@": "#F1F5F9",
+            "@TOPBAR@": "#FFFFFF",
+        }
+    else:  # dark (default)
+        tokens = {
+            "@BG@": "#0B0F17",
+            "@BG2@": "#0F1520",
+            "@BG3@": "#131A26",
+            "@FG@": "#E6EDF7",
+            "@FG2@": "#E6EDF7",
+            "@MUTED@": "#9AA8BD",
+            "@BORDER@": "#243044",
+            "@BORDER2@": "#2F3D55",
+            "@CARD@": "#131A26",
+            "@HOVER@": "#1A2332",
+            "@TOPBAR@": "#0F1520",
+        }
+
+    tokens.update({
         "@ACCENT@": accent,
         "@ACCENT_HOVER@": _shade(accent, 1.12),
         "@ACCENT_PRESSED@": _shade(accent, 0.85),
         "@ICONS@": _write_icons(accent),
-    }
+    })
     soft = QColor(accent)
     soft.setAlpha(0x2E)
     tokens["@ACCENT_SOFT@"] = f"rgba({soft.red()},{soft.green()},{soft.blue()},{soft.alpha()})"
+
     for key, val in tokens.items():
         qss = qss.replace(key, val)
+
+    # Для light-теми робимо додаткові заміни жорстко прописаних темних кольорів
+    if theme == "light":
+        replacements = {
+            "#0B0F17": "#F8FAFC",
+            "#0F1520": "#FFFFFF",
+            "#131A26": "#FFFFFF",
+            "#1A2332": "#F1F5F9",
+            "#222E42": "#E2E8F0",
+            "#243044": "#E2E8F0",
+            "#2F3D55": "#CBD5E1",
+            "#3B4A63": "#94A3B8",
+            "#E6EDF7": "#0F172A",
+            "#FFFFFF": "#0F172A",
+            "#9AA8BD": "#64748B",
+            "#6B7A93": "#94A3B8",
+            "#DBEAFE": "#1E40AF",
+            "#B4C0D4": "#64748B",
+        }
+        for old, new in replacements.items():
+            qss = qss.replace(old, new)
+
     app.setStyleSheet(qss)
+    app.setProperty("current_theme", theme)
 
 
 def logo_pixmap(name: str, size: int) -> QPixmap:

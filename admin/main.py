@@ -184,6 +184,16 @@ class MainWindow(QMainWindow):
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             bar.addWidget(b)
         bar.addStretch(1)
+
+        # Перемикач теми
+        self.theme_btn = QPushButton("☀ Світла")
+        self.theme_btn.setObjectName("ghostButton")
+        self.theme_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.theme_btn.setToolTip("Перемкнути темну / світлу тему")
+        self.theme_btn.clicked.connect(self._toggle_theme)
+        bar.addWidget(self.theme_btn)
+        bar.addSpacing(8)
+
         root.addWidget(topbar)
 
         # Content stack
@@ -200,6 +210,16 @@ class MainWindow(QMainWindow):
         self.btn_users.clicked.connect(lambda: self._switch(1))
         self.btn_results.clicked.connect(lambda: self._switch(2))
         self._switch(0)
+
+    def _toggle_theme(self) -> None:
+        app = QApplication.instance()
+        if not app:
+            return
+        current = app.property("current_theme") or "dark"
+        new_theme = "light" if current == "dark" else "dark"
+        accent = self.config.get("organization", {}).get("accent_color", "#3b82f6")
+        apply_theme(app, accent, new_theme)
+        self.theme_btn.setText("🌙 Темна" if new_theme == "light" else "☀ Світла")
 
     def _switch(self, index: int) -> None:
         self.stack.setCurrentIndex(index)

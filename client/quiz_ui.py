@@ -31,7 +31,7 @@ from PyQt6.QtWidgets import (
 from core.db import Database
 from core.dialogs import Msg
 from core.ui_kit import align_center, brand_row, centered_card
-from core.ui_theme import logo_pixmap, repolish
+from core.ui_theme import logo_pixmap, repolish, apply_theme
 from core.scoring import score_attempt
 from client.monitor import PeriodicScreenshot, ProcessMonitor
 from client.screenshots import capture_screenshot
@@ -138,6 +138,16 @@ class QuizScreen(QWidget):
         self.timer_label.setObjectName("timerLabel")
         self.timer_label.setProperty("low", False)
         top.addWidget(self.timer_label)
+
+        # Перемикач теми під час тесту
+        self.theme_btn = QPushButton("☀")
+        self.theme_btn.setObjectName("ghostButton")
+        self.theme_btn.setFixedSize(36, 36)
+        self.theme_btn.setToolTip("Перемкнути тему")
+        self.theme_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.theme_btn.clicked.connect(self._toggle_theme)
+        top.addWidget(self.theme_btn)
+
         root.addWidget(topbar)
 
         # ---------- дебаг-бар (режим розробника)
@@ -230,6 +240,17 @@ class QuizScreen(QWidget):
         self._option_widgets: list[QWidget] = []
         self._button_group: QButtonGroup | None = None
         self._open_edit: QLineEdit | None = None
+
+    def _toggle_theme(self) -> None:
+        from PyQt6.QtWidgets import QApplication
+        app = QApplication.instance()
+        if not app:
+            return
+        current = app.property("current_theme") or "dark"
+        new_theme = "light" if current == "dark" else "dark"
+        accent = self.config.get("organization", {}).get("accent_color", "#3b82f6")
+        apply_theme(app, accent, new_theme)
+        self.theme_btn.setText("🌙" if new_theme == "light" else "☀")
 
     def _start_timers(self) -> None:
         limit_min = int(self.test.get("time_limit_minutes") or 60)

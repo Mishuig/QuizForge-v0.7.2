@@ -30,6 +30,7 @@ from PyQt6.QtWidgets import (
     QListWidgetItem,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QSpinBox,
     QSplitter,
     QTableWidget,
@@ -57,18 +58,25 @@ class OptionRow(QWidget):
 
     def __init__(self, text: str = "", is_correct: bool = False, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.setMinimumHeight(36)
+
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 2, 0, 2)
+        layout.setSpacing(8)
 
         self.correct_cb = QCheckBox()
         self.correct_cb.setChecked(is_correct)
         self.correct_cb.setToolTip("Правильна відповідь")
+        self.correct_cb.setFixedWidth(28)
 
         self.text_edit = QLineEdit(text)
         self.text_edit.setPlaceholderText("Текст варіанту")
+        self.text_edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.text_edit.setMinimumHeight(32)
 
         self.remove_btn = QPushButton("✕")
-        self.remove_btn.setFixedWidth(32)
+        self.remove_btn.setFixedSize(32, 32)
         self.remove_btn.setObjectName("secondaryButton")
         self.remove_btn.setToolTip("Видалити варіант")
 
@@ -278,26 +286,32 @@ class TestsTab(QWidget):
         # Варіанти (для single/multiple)
         self.options_group = QGroupBox("Варіанти відповідей")
         self.options_layout = QVBoxLayout(self.options_group)
-        self.options_layout.setContentsMargins(8, 8, 8, 8)
+        self.options_layout.setContentsMargins(8, 12, 8, 8)
+        self.options_layout.setSpacing(8)
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        scroll.setMinimumHeight(120)
-        scroll.setMaximumHeight(280)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setMinimumHeight(100)
+        scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         container = QWidget()
+        container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         self.options_container = QVBoxLayout(container)
-        self.options_container.setContentsMargins(0, 0, 0, 0)
-        self.options_container.setSpacing(4)
+        self.options_container.setContentsMargins(0, 0, 4, 0)
+        self.options_container.setSpacing(6)
+        self.options_container.addStretch(1)  # щоб рядки не розтягувались зайве
         scroll.setWidget(container)
-        self.options_layout.addWidget(scroll)
+        self.options_layout.addWidget(scroll, stretch=1)
 
         add_opt_btn = QPushButton("Додати варіант")
         add_opt_btn.setObjectName("secondaryButton")
+        add_opt_btn.setMinimumHeight(36)
         add_opt_btn.clicked.connect(self._add_option_row)
         self.options_layout.addWidget(add_opt_btn)
-        q_right.addWidget(self.options_group)
+        q_right.addWidget(self.options_group, stretch=1)
 
         # Відкриті відповіді
         self.open_group = QGroupBox("Допустимі відповіді (через «;»)")
@@ -567,7 +581,11 @@ class TestsTab(QWidget):
         row = OptionRow(text, is_correct)
         row.remove_btn.clicked.connect(lambda: self._remove_option_row(row))
         self._option_rows.append(row)
-        self.options_container.addWidget(row)
+        # Вставляємо перед stretch (останній елемент)
+        stretch_index = self.options_container.count() - 1
+        if stretch_index < 0:
+            stretch_index = 0
+        self.options_container.insertWidget(stretch_index, row)
 
     def _remove_option_row(self, row: OptionRow) -> None:
         if row in self._option_rows:
